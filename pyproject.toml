@@ -1,0 +1,22 @@
+[project]
+name = "Wuthering Gacha"
+version = "3.1rc7"
+dependencies = [
+    "requests",
+    "loguru",
+    "pyside6",
+]
+requires-python = ">=3.10"
+authors = [
+    {name = "attn_deficit"}
+]
+description = "Gacha Data from Wuthering Waves"
+license = {file = "LICENSE"}
+keywords = ["wuwa", "Wuthering Waves"]
+classifiers = ["Programming Language :: Python"]
+
+[project.optional-dependencies]
+cli = ["rich"]
+
+[project.urls]
+Repository = "https://github.com/qenu/wutheringacha"
