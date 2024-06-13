@@ -2,7 +2,7 @@ from time import sleep
 
 from loguru import logger as log
 from PySide6.QtCore import QSize, QTimer
-from PySide6.QtGui import Qt
+from PySide6.QtGui import Qt, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -23,6 +23,7 @@ from wuthering import (
     PoolData,
     WutheringData,
 )
+import rc_irons
 
 
 def spin(index):
@@ -35,6 +36,8 @@ class MainWindow(QMainWindow):
         log.debug("Created QMainWindow")
         self.setWindowTitle("鳴潮卡池紀錄")
         self.setFixedSize(QSize(300, 100))
+        pixmap = QPixmap(":icons/icon.png")
+        self.setWindowIcon(QIcon(pixmap))
 
         self.backend = WutheringData()
         self.tick_count = 0
