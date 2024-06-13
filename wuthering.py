@@ -1,5 +1,5 @@
 TITLE = "Wuthering Gacha"
-VERSION = "3.0.alpha"
+VERSION = "3.1rc7" 
 AUTHOR = "attn_deficit"
 
 PATH = ["Wuthering Waves", "Wuthering Waves Game", "Client", "Saved", "Logs"]
@@ -31,17 +31,16 @@ POOLTYPE = {
 STANDARD_POOL = ["安可", "鑒心", "維里奈", "卡卡羅", "凌陽"]
 
 
-
 import os
 import re
 import sys
 from datetime import datetime
-from time import sleep
+from subprocess import CalledProcessError, check_output
 
 import requests
 from loguru import logger as log
 from psutil import NoSuchProcess, Process, pids
-from subprocess import check_output, CalledProcessError
+
 # from rich.columns import Columns
 # from rich.console import Console
 # from rich.panel import Panel
@@ -154,6 +153,9 @@ class WutheringData:
         self._logfile = ""
 
     def locate_executable(self) -> bool:
+        # self._logfile = "lmao"
+        # return True
+
         # for id in pids():
         #     try:
         #         if Process(id).name() == EXE_NAME:
@@ -171,11 +173,11 @@ class WutheringData:
         #         pass
         # return False
         try:
-            id = check_output(f"tasklist | find \"{EXE_NAME}\"", shell=True)
+            id = check_output(f'tasklist | find "{EXE_NAME}"', shell=True)
             log.debug("id found: {}", id)
             if not id:
                 return False
-            id = id.split()[1]
+            id = int(id.split()[1])
             log.debug("id found: {}", id)
             if Process(id).name() == EXE_NAME:
                 executable = Process(id).exe()
@@ -205,6 +207,8 @@ class WutheringData:
         if url == "":
             return False
         # url = TESTING_ONLY_URL
+
+        log.debug("Found url: {}", url)
 
         regex = re.search(f'{FETCH_URL[-9:]}[^"]*', url)
         partial = {
@@ -239,43 +243,43 @@ class WutheringData:
             log.info("Fetching {name} PoolData", name=name)
             self.data[name] = self.fetch_data(key)
 
-    def output(self) -> list:
-        _output = []
-        for title in POOLTYPE.values():
-            if node := self.data.get(title, False):
-                hist = node.get_history(5)
-                histstr = [
-                    f"[{color}]{_.name}[{_.pity}][/{color}]"
-                    for _ in hist
-                    if (
-                        color := (
-                            "red"
-                            if title == "角色活動" and _.name in STANDARD_POOL
-                            else _._color
-                        )
-                    )
-                ]
-                _output.append(
-                    Panel(
-                        (
-                            f"[b]{title}卡池紀錄[/b]\n"
-                            "-------------------\n"
-                            f"抽取次數: {node.attempt}\n"
-                            f"目前保底數量: {node.get_pity}\n"
-                            "[yellow]"
-                            f"5星概率: {node.get_ratio(5)*100:.2f}%\n"
-                            f"5星平均: {node.get_average(5)}抽\n"
-                            "[/yellow][purple]"
-                            f"4星概率: {node.get_ratio(4)*100:.2f}%\n"
-                            f"4星平均: {node.get_average(4)}抽\n"
-                            "[/purple]"
-                            "-------------------\n"
-                            f"最近紀錄: \n{', '.join(histstr)}\n"
-                        ),
-                        width=26,
-                    )
-                )
-        return _output
+    # def output(self) -> list:
+    #     _output = []
+    #     for title in POOLTYPE.values():
+    #         if node := self.data.get(title, False):
+    #             hist = node.get_history(5)
+    #             histstr = [
+    #                 f"[{color}]{_.name}[{_.pity}][/{color}]"
+    #                 for _ in hist
+    #                 if (
+    #                     color := (
+    #                         "red"
+    #                         if title == "角色活動" and _.name in STANDARD_POOL
+    #                         else _._color
+    #                     )
+    #                 )
+    #             ]
+    #             _output.append(
+    #                 Panel(
+    #                     (
+    #                         f"[b]{title}卡池紀錄[/b]\n"
+    #                         "-------------------\n"
+    #                         f"抽取次數: {node.attempt}\n"
+    #                         f"目前保底數量: {node.get_pity}\n"
+    #                         "[yellow]"
+    #                         f"5星概率: {node.get_ratio(5)*100:.2f}%\n"
+    #                         f"5星平均: {node.get_average(5)}抽\n"
+    #                         "[/yellow][purple]"
+    #                         f"4星概率: {node.get_ratio(4)*100:.2f}%\n"
+    #                         f"4星平均: {node.get_average(4)}抽\n"
+    #                         "[/purple]"
+    #                         "-------------------\n"
+    #                         f"最近紀錄: \n{', '.join(histstr)}\n"
+    #                     ),
+    #                     width=26,
+    #                 )
+    #             )
+    #     return _output
 
 
 # def rich_console(wd: WutheringData):
