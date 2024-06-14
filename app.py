@@ -163,11 +163,11 @@ class MainWindow(QMainWindow):
                 f"　平均: 　　{four_avg      }\n"
                 f"　總計: 　　{len(four_pool)}\n"
                 "\n4星角色\n"
-                f"　機率: 　　{len(four_char)}\n"
-                f"　總計: 　　{len(four_char)/len(four_pool):.2f}%\n"
+                f"　機率: 　　{len(four_char)/len(four_pool):.2f}%\n"
+                f"　總計: 　　{len(four_char)}\n"
                 "\n4星武器\n"
-                f"　機率: 　　{len(four_weap)}\n"
-                f"　總計: 　　{len(four_weap)/len(four_pool):.2f}%\n"
+                f"　機率: 　　{len(four_weap)/len(four_pool):.2f}%\n"
+                f"　總計: 　　{len(four_weap)}\n"
             )
         )
         desc.setAlignment(Qt.AlignmentFlag.AlignTop)
