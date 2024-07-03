@@ -1,217 +1,186 @@
-from time import sleep
+from dynaconf import Dynaconf, loaders
+from dynaconf.utils.boxing import DynaBox
+from enum import IntEnum
+from urllib import parse
+from datetime import datetime
+import requests
+import msgspec
 
-from loguru import logger as log
-from PySide6.QtCore import QSize, QTimer
-from PySide6.QtGui import Qt, QIcon, QPixmap
-from PySide6.QtWidgets import (
-    QApplication,
-    QComboBox,
-    QHBoxLayout,
-    QLabel,
-    QMainWindow,
-    QVBoxLayout,
-    QWidget,
-    QScrollArea,
-    QFrame,
+# trame
+
+PATH = ""
+API = "https://gmserver-api.aki-game2.net/gacha/record/query"
+
+PERMA = [
+    1104,   # lingyang
+    1203,   # encore
+    1301,   # calcharo
+    1405,   # jianxin
+    1503,   # verina
+]
+
+SETTINGS_FILE = "settings.toml"
+
+settings = Dynaconf(
+    settings_files=[SETTINGS_FILE],
 )
-from wuthering import (
-    AUTHOR,
-    POOLTYPE,
-    STANDARD_POOL,
-    TITLE,
-    VERSION,
-    PoolData,
-    WutheringData,
-)
-import rc_irons
 
+def settings_reload():
+    data = settings.as_dict()
+    loaders.write(SETTINGS_FILE, DynaBox(data).to_dict(), merge=False)
 
-def spin(index):
-    return "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"[index]
+class CONVENE_TYPE(IntEnum):
+    character_event:        int = 1
+    weapon_event:           int = 2
+    character_permanent:    int = 3
+    weapon_permanent:       int = 4
 
+class ConveneNode(msgspec.Struct):
+    id: int
+    time: int
 
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        log.debug("Created QMainWindow")
-        self.setWindowTitle("鳴潮卡池紀錄")
-        self.setFixedSize(QSize(300, 100))
-        pixmap = QPixmap(":icons/icon.png")
-        self.setWindowIcon(QIcon(pixmap))
+class Convene(msgspec.Struct):
+    history: list[ConveneNode] = []
 
-        self.backend = WutheringData()
-        self.tick_count = 0
+    def load(self, data: dict) -> "Convene":
+        self.history = [
+                ConveneNode(
+                    id=item["id"],
+                    time=item["time"]
+                ) 
+                for item in data
+                ]
+        return self
 
-        layout = QVBoxLayout()
-        widget = QWidget()
+class WutherInfo:
+    """ WutherInfo Class
+    stores payload, nickname and update time
+    """
+    name: str = ""
+    time: int = 0
 
-        self.center_text = QLabel("你好，鳴潮")
-        layout.addWidget(
-            self.center_text, alignment=Qt.AlignmentFlag.AlignCenter
+    server_id: str = ""
+    player_id: str = ""
+    record_id: str = ""
+    pool_id: str = ""
+    language_code: str = ""
+
+    def __repr__(self) -> str:
+        return (
+            f"WutherInfo<{self.name}> "
+            f"t={self.time} "
+            f"ply={self.player_id} "
+            f"svr={self.server_id} "
+            f"rec={self.record_id} "
+            f"pool={self.pool_id} "
+            f"lang={self.language_code}"
         )
 
-        widget.setLayout(layout)
-        self.setCentralWidget(widget)
-        self.statusBar().showMessage(
-            f"{TITLE} v{VERSION} | 這我: {AUTHOR}"
-        )
-        self.show()
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "time": self.time,
+            "svr_id": self.server_id,
+            "ply_id": self.player_id,
+            "rec_id": self.record_id,
+            "pool_id": self.pool_id,
+            "lang": self.language_code
+        }
+    
+    def loadurl(self, url: str) -> "WutherInfo":
+        query = parse.urlsplit(url=url).fragment.split("?")[1]
+        parse_dict = dict(parse.parse_qsl(query))
+        self.server_id = parse_dict["svr_id"]
+        self.player_id = parse_dict["player_id"]
+        self.record_id = parse_dict["record_id"]
+        self.pool_id = parse_dict["resources_id"]
+        self.language_code = parse_dict["lang"]
+        return self
 
-        log.debug("Starting QTimer")
-        self.tick = QTimer()
-        self.tick.setInterval(42)
-        self.tick.timeout.connect(self.detect_game)
-        self.tick.start()
+    def load(self, data: dict) -> "WutherInfo":
+        self.name = data["name"]
+        self.time = data["time"]
+        self.server_id = data["svr_id"]
+        self.player_id = data["ply_id"]
+        self.record_id = data["rec_id"]
+        self.pool_id = data["pool_id"]
+        self.language_code = data["lang"]
+        return self
 
-    def detect_game(self):
-        if self.tick_count % 29 == 0 and self.backend.locate_executable():
-            log.debug("Game detected")
-            self.center_text.setText(f"鳴潮，啟動！")
-            sleep(1)  # for memes
-            self.tick.timeout.disconnect(self.detect_game)
-            self.tick.timeout.connect(self.fetch_payload)
-        else:
-            self.center_text.setText(
-                f"{spin(self.tick_count%10)} 正在等待鳴潮啟動"
+    @property
+    def payload(self) -> dict:
+        return {
+            "serverId": self.server_id,
+            "playerId": self.player_id,
+            "languageCode": self.language_code,
+            "recordId": self.record_id,
+            "cardPoolId": self.pool_id,
+        }
+
+class WutherAccount:
+    def __init__(self, info: WutherInfo):
+        self.convene: dict[str, Convene] = {}
+        self.info: WutherInfo = info
+
+    def prev_update(self) -> datetime:
+        return datetime.fromtimestamp(self.info.time)
+
+    def _get_convene(self, _type: CONVENE_TYPE) -> Convene:
+        payload = self.info.payload
+        payload["cardPoolType"] = _type
+        response = requests.post(API, json=payload)
+        data = response.json()["data"]
+        return Convene(
+            history=[
+                ConveneNode(
+                    id=item["resourceId"],
+                    time=int(
+                        datetime.strptime(
+                            item["time"], "%Y-%m-%d %H:%M:%S"
+                        ).timestamp()
+                    )
+                ) 
+                for item in data
+                ]
             )
-        self.tick_count += 1
 
-    def fetch_payload(self):
-        if self.tick_count % 29 == 0 and self.backend.fetch_payload():
-            log.debug("Created Payload for API request")
-            self.tick.timeout.disconnect(self.fetch_payload)
-            self.tick.timeout.connect(self.populate_data)
-        else:
-            self.center_text.setText(
-                f"{spin(self.tick_count%10)} 缺少資料，請開啟遊戲內抽卡紀錄"
-            )
-        self.tick_count += 1
+    def get_convene(self):
+        for _type in CONVENE_TYPE:
+            convene: Convene = self._get_convene(_type)
+            self.convene[_type.name] = convene
+        self.info.time = int(datetime.timestamp(datetime.now()))
 
-    def populate_data(self):
-        log.debug("Populating data from pool")
-        if self.tick_count % 18 == 0:
-            self.center_text.setText("完成")
-            self.repaint()
-            self.backend.populate_data()
-            self.tick.timeout.disconnect(self.populate_data)
-            self.tick.stop()
-            self.dropdown_update()
-        else:
-            self.center_text.setText(
-                f"{spin(self.tick_count%10)} 正在整理數據"
-            )
-        self.tick_count += 1
+    def save(self) -> None:
+        with open(self.info.player_id + ".json", "wb") as f:
+            f.write(msgspec.json.Encoder().encode(self.convene))
 
-    def dropdown_update(self, selection: str = POOLTYPE[1]):
-        log.debug("Refreshed center Dropdown Widget")
-        self.setFixedSize(QSize(300, 420))
-
-        widget = QWidget()
-        layout = QVBoxLayout()
-        dropdown = QComboBox()
-
-        dropdown.addItems(
-            [k for k, v in self.backend.data.items() if v and v.attempt]
-        )
-        dropdown.setCurrentText(selection)
-        dropdown.currentTextChanged.connect(self.dropdown_update)
-
-        layout.addWidget(dropdown)
-        content_layout = self.result_content(selection)
-        layout.addLayout(content_layout)
-        widget.setLayout(layout)
-        self.setCentralWidget(widget)
-
-    def result_content(self, pool: str) -> None:
-        log.debug("Content created")
-        data: PoolData = self.backend.data[pool]
-        layout = QHBoxLayout()
-        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-        five_ratio = f"{data.get_ratio(5)*100:.2f}%"
-        five_avg = f"{data.get_average(5)}抽"
-        five_pool = data.entry.get(5, [])
-        four_ratio = f"{data.get_ratio(4)*100:.2f}%"
-        four_avg = f"{data.get_average(4)}抽"
-        four_pool = data.entry.get(4, [])
-        four_char = [
-            _ for _ in data.entry.get(4, []) if _.resourcetype == "角色"
-        ]
-        four_weap = [
-            _ for _ in data.entry.get(4, []) if _.resourcetype == "武器"
-        ]
-        optional = ""
-        cum = data.get_history(5)
-        if cum and pool == "角色活動":
-            hit_miss = (
-                len([_ for _ in cum if _.name not in STANDARD_POOL])
-                / len(cum)
-                * 100
-            )
-            optional = f"保底命中:  　{hit_miss:.2f}%"
-
-        desc = QLabel(
-            (
-                f"抽取次數:  　{data.attempt  }\n"
-                f"目前保底:  　{data.get_pity }\n"
-                f"{optional}\n"
-                "\n5星\n"
-                f"　機率: 　　{five_ratio    }\n"
-                f"　平均: 　　{five_avg      }\n"
-                f"　總計: 　　{len(five_pool)}\n"
-                "\n4星\n"
-                f"　機率: 　　{four_ratio    }\n"
-                f"　平均: 　　{four_avg      }\n"
-                f"　總計: 　　{len(four_pool)}\n"
-                "\n4星角色\n"
-                f"　機率: 　　{len(four_char)/len(four_pool):.2f}%\n"
-                f"　總計: 　　{len(four_char)}\n"
-                "\n4星武器\n"
-                f"　機率: 　　{len(four_weap)/len(four_pool):.2f}%\n"
-                f"　總計: 　　{len(four_weap)}\n"
-            )
-        )
-        desc.setAlignment(Qt.AlignmentFlag.AlignTop)
-        desc.setFixedWidth(140)
-        layout.addWidget(desc)
-
-        right_col = QVBoxLayout()
-        right_col.setAlignment(
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
-        )
-        right_col.addWidget(QLabel("最近紀錄"))
-
-        log.debug("Pool cum data: {}", cum)
-        scroll = QScrollArea()
-        scroll.setVerticalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOn
-        )
-        scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
-        scroll.setWidgetResizable(True)
-        inner = QFrame(scroll)
-        inner.setLayout(QVBoxLayout())
-        inner.layout().setAlignment(Qt.AlignmentFlag.AlignTop)
-        scroll.setWidget(inner)
-        for item in cum:
-            label = QLabel(f"{item.name:　<5}{item.pity:>2}抽")
-            label.setAlignment(Qt.AlignmentFlag.AlignLeft)
-            label.setStyleSheet("color: cornflowerblue")
-            if pool == "角色活動" and item.name in STANDARD_POOL:
-                label.setStyleSheet("color: orangered")
-            inner.layout().addWidget(label)
-
-        right_col.addWidget(scroll)
-        layout.addLayout(right_col)
-        return layout
+    def load_convene(self):
+        try:
+            with open(self.info.player_id + ".json", "rb") as f:
+                data = f.read()
+        except FileNotFoundError:
+            return False
+        content = msgspec.json.Decoder().decode(data)
+        self.convene = {}
+        for k, v in content.items():
+            self.convene[k] = Convene().load(v["history"])
 
 
 if __name__ == "__main__":
-    log.remove()
-    import sys
+    foo = "one"
+    # url = "https://aki-gm-resources-oversea.aki-game.net/aki/gacha/index.html#/record?svr_id=86d52186155b148b5c138ceb41be9650&player_id=700849865&lang=zh-Hant&gacha_id=100002&gacha_type=1&svr_area=global&record_id=2a7b31de6566a088156605a6762cbdce&resources_id=89e301f1dfcbd79ea04fb10bde2469e4"
+    # info = WutherInfo().loadurl(url=url)
+    k = list(settings.accounts.keys())[0]
+    d = settings.accounts.get(k)
+    info = WutherInfo().load(data=d)
+    print(info)
+    acc = WutherAccount(info)
+    print(foo)
+    # o = acc._get_convene(CONVENE_TYPE.character_permanent)
+    print(acc.convene)
+    acc.get_convene()
+    # print(acc.convene)
+    acc.save()
 
-    log.add(sys.stdout, level="DEBUG")
-    app = QApplication()
-    window = MainWindow()
-    log.debug("App Start")
-    app.exec()
+    # acc.load_convene()
+    print(acc.convene)

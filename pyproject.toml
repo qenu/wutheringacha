@@ -1,10 +1,11 @@
 [project]
 name = "Wuthering Gacha"
-version = "3.1.0"
+version = "4.dev.0"
 dependencies = [
     "requests",
     "loguru",
-    "pyside6",
+    "msgspec",
+    "dynaconf",
 ]
 requires-python = ">=3.10"
 authors = [
