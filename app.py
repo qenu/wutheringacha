@@ -168,7 +168,6 @@ class WutherAccount:
 
 if __name__ == "__main__":
     foo = "one"
-    # url = "https://aki-gm-resources-oversea.aki-game.net/aki/gacha/index.html#/record?svr_id=86d52186155b148b5c138ceb41be9650&player_id=700849865&lang=zh-Hant&gacha_id=100002&gacha_type=1&svr_area=global&record_id=2a7b31de6566a088156605a6762cbdce&resources_id=89e301f1dfcbd79ea04fb10bde2469e4"
     # info = WutherInfo().loadurl(url=url)
     k = list(settings.accounts.keys())[0]
     d = settings.accounts.get(k)
