@@ -88,7 +88,7 @@ class ConveneStat:
                 pass # 3 star weapon
             elif node.id in FOUR:
                 pass # 4 star
-            
+
 
             
 
@@ -148,14 +148,19 @@ class WutherInfo:
         self.language_code = data["lang"]
         return self
 
-    @property
-    def payload(self) -> dict:
+    def payload(self, *,
+                server_id: str = "",
+                player_id: str = "",
+                language_code: str = "",
+                record_id: str = "",
+                pool_id: str = "",
+                ) -> dict:
         return {
-            "serverId": self.server_id,
-            "playerId": self.player_id,
-            "languageCode": self.language_code,
-            "recordId": self.record_id,
-            "cardPoolId": self.pool_id,
+            "serverId": server_id or self.server_id,
+            "playerId": player_id or self.player_id,
+            "languageCode": language_code or self.language_code,
+            "recordId": record_id or self.record_id,
+            "cardPoolId": pool_id or self.pool_id,
         }
 
 class WutherAccount:
@@ -167,8 +172,7 @@ class WutherAccount:
         return datetime.fromtimestamp(self.info.time)
 
     def _get_convene(self, _type: CONVENE_TYPE) -> Convene:
-        payload = self.info.payload
-        payload["cardPoolType"] = _type
+        payload = self.info.payload(pool_id=_type)
         response = requests.post(API, json=payload)
         data = response.json()["data"]
         return Convene(
@@ -210,18 +214,32 @@ class WutherAccount:
 if __name__ == "__main__":
     foo = "one"
     # info = WutherInfo().loadurl(url=url)
-    k = list(settings.accounts.keys())[0]
+    k = list(settings.accounts.keys())[1]
     d = settings.accounts.get(k)
     info = WutherInfo().load(data=d)
     # print(info)
     acc = WutherAccount(info)
     # print(foo)
     # o = acc._get_convene(CONVENE_TYPE.character_permanent)
-    print(len(acc.convene))
+    # print(len(acc.convene))
     # acc.get_convene()
     # print(acc.convene)
     # acc.save()
 
-    acc.load_convene()
-    print(len(acc.convene))
-    print(len(acc.convene["character_event"].history))
+    # acc.load_convene()
+    # print(len(acc.convene))
+    # print(len(acc.convene["character_event"].history))
+
+    # response = requests.post(
+    #     API, 
+    #     json=acc.info.payload(pool_id=1, language_code="en")
+    # )
+    # data = response.json()["data"]
+
+    # locale = {}
+    # for item in data:
+    #     if item["name"] in locale.values():
+    #         continue
+    #     locale[str(item["resourceId"])] = item["name"]
+
+    # locale = {_: locale[_] for _ in sorted(locale)}
