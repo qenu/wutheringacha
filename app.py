@@ -6,34 +6,13 @@ from datetime import datetime
 import requests
 import msgspec
 
+TAGS = "https://raw.githubusercontent.com/qenu/wutheringacha/4.dev.0/resource.json"
+LOCALE = "https://raw.githubusercontent.com/qenu/wutheringacha/4.dev.0/locale/{}.json"
+
+SETTINGS_FILE = "settings.toml"
 
 PATH = ""
 API = "https://gmserver-api.aki-game2.net/gacha/record/query"
-
-
-# ===== really could just pull all these shits from github
-# ===== also the fucking lang files
-PERMA = [
-    1104,   # lingyang
-    1203,   # encore
-    1301,   # calcharo
-    1405,   # jianxin
-    1503,   # verina
-]
-
-FOUR = [
-    1102,   # sanhua
-    1103,   # baizhi
-    1202,   # chixia
-    1204,   # mortefi
-    1303,   # yuanwu
-    1402,   # yangyang
-    1403,   # aalto
-    1601,   # taoqi
-    1602,   # danjin
-]
-
-SETTINGS_FILE = "settings.toml"
 
 settings = Dynaconf(
     settings_files=[SETTINGS_FILE],
@@ -66,32 +45,22 @@ class Convene(msgspec.Struct):
                 ]
         return self
 
-    # def get_record(self):
-    #     record = []
-    #     pity = 0
-    #     for num, node in enumerate(self.history, start=1):
-    #         pass
-
 class ConveneStat:
-    def __init__(self, data: list[ConveneNode]):
+    def __init__(self, data: list[ConveneNode], tags: dict):
         self.gold = []
         self.purple = []
         self.gold_rate = 0.0
         self.purple_rate = 0.0
         self.current_pity = 0
         self.total_pulls = 0
-        self.load_data(data)
+        self.load_data(data, tags)
 
-    def load_data(self, data: list[ConveneNode]):
+    def load_data(self, data: list[ConveneNode], purple_list):
         for node in data:
             if node.id > 10000:
                 pass # 3 star weapon
-            elif node.id in FOUR:
+            elif node.id in purple_list:
                 pass # 4 star
-
-
-            
-
 
 class WutherInfo:
     """ WutherInfo Class
@@ -168,6 +137,11 @@ class WutherAccount:
         self.convene: dict[str, Convene] = {}
         self.info: WutherInfo = info
 
+        lang = requests.get(LOCALE.format(self.info.language_code))
+        tags = requests.get(TAGS)
+        self.locale_name = lang.json()
+        self.tags = tags.json()
+
     def prev_update(self) -> datetime:
         return datetime.fromtimestamp(self.info.time)
 
@@ -210,6 +184,10 @@ class WutherAccount:
         for k, v in content.items():
             self.convene[k] = Convene().load(v["history"])
 
+    def get_stats(self, convene_key: str):
+        if convene_key not in self.convene.keys():
+            return 
+        stat = ConveneStat(self.convene[convene_key], self.tags)
 
 if __name__ == "__main__":
     foo = "one"
@@ -217,7 +195,6 @@ if __name__ == "__main__":
     k = list(settings.accounts.keys())[1]
     d = settings.accounts.get(k)
     info = WutherInfo().load(data=d)
-    # print(info)
     acc = WutherAccount(info)
     # print(foo)
     # o = acc._get_convene(CONVENE_TYPE.character_permanent)
